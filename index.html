@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CNN Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            visibility: hidden;
+        }
+
+        #ui>* {
+            pointer-events: auto;
+        }
+
+        #canvas-container {
+            position: absolute;
+            border: 2px solid transparent;
+            background:
+                linear-gradient(#000, #000) padding-box,
+                linear-gradient(135deg, #00d4ff 0%, #7b2cbf 50%, #c77dff 100%) border-box;
+            box-shadow:
+                0 0 12px rgba(0, 212, 255, 0.5),
+                0 0 24px rgba(123, 44, 191, 0.6);
+        }
+        #canvas-container::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            border-radius: inherit;
+            background: radial-gradient(
+                circle 80px at var(--mouse-x, 50%) var(--mouse-y, 50%),
+                rgba(255, 255, 255, 0.07) 0%,
+                transparent 70%
+            );
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+        #canvas-container.mouse-near::after {
+            opacity: 1;
+        }
+
+        #drawCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #instructions {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, calc(-50% - 300px));
+            color: #ffcc00;
+            text-align: center;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 12px;
+            line-height: 2.2;
+            pointer-events: none;
+            text-shadow:
+                0 0 5px rgba(255, 204, 0, 0.65),
+                0 0 10px rgba(255, 170, 0, 0.45);
+        }
+
+        #instructions .sub {
+            font-size: 10px;
+            margin-top: 16px;
+            opacity: 0.95;
+        }
+
+        #button {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, calc(-50% + 270px));
+            width: 300px;
+            height: 80px;
+            border: 2px solid transparent;
+            background:
+                linear-gradient(#000, #000) padding-box,
+                linear-gradient(135deg, #00d4ff 0%, #7b2cbf 50%, #c77dff 100%) border-box;
+            cursor: pointer;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 14px;
+            color: #ffcc00;
+            pointer-events: auto;
+            text-shadow:
+                0 0 5px rgba(255, 204, 0, 0.65),
+                0 0 10px rgba(255, 170, 0, 0.45);
+            box-shadow:
+                0 0 12px rgba(0, 212, 255, 0.5),
+                0 0 24px rgba(123, 44, 191, 0.6);
+        }
+        #button::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            border-radius: inherit;
+            background: radial-gradient(
+                circle 120px at var(--mouse-x, 50%) var(--mouse-y, 50%),
+                rgba(255, 255, 255, 0.08) 0%,
+                transparent 70%
+            );
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+        #button.mouse-near::after {
+            opacity: 1;
+        }
+
+        #button:hover {
+            color: #ffdd22;
+            text-shadow:
+                0 0 6px rgba(255, 221, 34, 0.65),
+                0 0 12px rgba(255, 204, 0, 0.45);
+            box-shadow:
+                0 0 16px rgba(0, 212, 255, 0.6),
+                0 0 32px rgba(123, 44, 191, 0.7);
+        }
+
+        #button:active {
+            color: #ffbb00;
+            box-shadow:
+                0 0 10px rgba(0, 212, 255, 0.6),
+                0 0 20px rgba(123, 44, 191, 0.7);
+        }
+
+        #inputHeader {
+            display: none;
+            position: absolute;
+            left: 50%;
+            top: 40px;
+            transform: translateX(-50%);
+            color: #ffcc00;
+            text-align: center;
+            font-family: 'Press Start 2P', monospace;
+            white-space: nowrap;
+            font-size: 22px;
+            line-height: 2;
+            pointer-events: none;
+            text-shadow:
+                0 0 5px rgba(255, 204, 0, 0.65),
+                0 0 10px rgba(255, 170, 0, 0.45);
+        }
+        #inputHeader.visible {
+            display: block;
+        }
+        #ui.has-header #instructions {
+            transform: translate(-50%, calc(-50% - 260px));
+        }
+        #ui.has-header #button {
+            transform: translate(-50%, calc(-50% + 310px));
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #returnToInputButton {
+            position: absolute;
+            left: 50%;
+            bottom: 40px;
+            transform: translateX(-50%);
+            z-index: 100;
+            min-width: 280px;
+            min-height: 56px;
+            padding: 14px 20px;
+            border: 2px solid transparent;
+            background:
+                linear-gradient(#000, #000) padding-box,
+                linear-gradient(135deg, #00d4ff 0%, #7b2cbf 50%, #c77dff 100%) border-box;
+            cursor: pointer;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 9px;
+            line-height: 2.2;
+            color: #ffcc00;
+            text-transform: uppercase;
+            white-space: normal;
+            text-align: center;
+            letter-spacing: 0.02em;
+            pointer-events: auto;
+            text-shadow:
+                0 0 5px rgba(255, 204, 0, 0.65),
+                0 0 10px rgba(255, 170, 0, 0.45);
+            box-shadow:
+                0 0 12px rgba(0, 212, 255, 0.5),
+                0 0 24px rgba(123, 44, 191, 0.6);
+        }
+        #returnToInputButton::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            border-radius: inherit;
+            background: radial-gradient(
+                circle 100px at var(--mouse-x, 50%) var(--mouse-y, 50%),
+                rgba(255, 255, 255, 0.07) 0%,
+                transparent 70%
+            );
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+        #returnToInputButton.mouse-near::after {
+            opacity: 1;
+        }
+
+        #returnToInputButton:hover {
+            color: #ffdd22;
+            text-shadow:
+                0 0 6px rgba(255, 221, 34, 0.65),
+                0 0 12px rgba(255, 204, 0, 0.45);
+            box-shadow:
+                0 0 16px rgba(0, 212, 255, 0.6),
+                0 0 32px rgba(123, 44, 191, 0.7);
+        }
+
+        #returnToInputButton:active {
+            color: #ffbb00;
+            box-shadow:
+                0 0 10px rgba(0, 212, 255, 0.6),
+                0 0 20px rgba(123, 44, 191, 0.7);
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="glCanvas"></canvas>
+    <div id="ui">
+        <div id="inputHeader">Convolutional Neural Network Visualization</div>
+        <div id="instructions">
+            <div>Draw a number between 0 and 9</div>
+            <div class="sub">The network will classify your drawing</div>
+        </div>
+        <div id="canvas-container">
+            <canvas id="drawCanvas" width="32" height="32"></canvas>
+        </div>
+        <button id="button">Predict</button>
+    </div>
+    <button id="returnToInputButton" class="hidden">Enter Another Number</button>
+
+    <script src="js/webgl-utils.js"></script>
+    <script src="js/camera.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/Tensor.js"></script>
+    <script src="js/Conv2D.js"></script>
+    <script src="js/MLP.js"></script>
+    <script src="js/Box.js"></script>
+    <script src="js/Animation.js"></script>
+    <script src="js/TensorVisualizer.js"></script>
+    <script src="js/Conv2DVisualizer.js"></script>
+    <script src="js/MLPVisualizer.js"></script>
+    <script src="js/ReshapeVisualizer.js"></script>
+    <script src="js/WebGLRenderer.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>
