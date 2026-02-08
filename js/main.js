@@ -260,27 +260,82 @@ function setupInputPage() {
         document.getElementById('inputHeader').classList.add('visible');
     }
 
-    canvasW = 400;
-    canvasH = 400;
-    canvasX = window.innerWidth / 2;
-    canvasY = window.innerHeight / 2 - 30 + HEADER_OFFSET;
+    const landscape = isLandscapeInput();
+    const ui = document.getElementById('ui');
+    if (landscape) {
+        ui.classList.add('landscape-input');
+    } else {
+        ui.classList.remove('landscape-input');
+    }
 
-    canvasLeft = canvasX - canvasW / 2;
-    canvasRight = canvasX + canvasW / 2;
-    canvasTop = canvasY - canvasH / 2;
-    canvasBottom = canvasY + canvasH / 2;
-
+    const size = getInputCanvasSize();
+    canvasW = size.w;
+    canvasH = size.h;
+    const isSmallScreen = window.innerHeight <= 700 || window.innerWidth <= 420;
     const canvasContainer = document.getElementById('canvas-container');
     canvasContainer.style.width = canvasW + 'px';
     canvasContainer.style.height = canvasH + 'px';
-    canvasContainer.style.left = canvasLeft + 'px';
-    canvasContainer.style.top = canvasTop + 'px';
+
+    if (landscape) {
+        canvasContainer.style.left = '';
+        canvasContainer.style.right = '';
+        canvasContainer.style.top = '50%';
+        canvasContainer.style.transform = 'translateY(-50%)';
+        const rect = canvasContainer.getBoundingClientRect();
+        canvasLeft = rect.left;
+        canvasRight = rect.right;
+        canvasTop = rect.top;
+        canvasBottom = rect.bottom;
+        canvasX = (rect.left + rect.right) / 2;
+        canvasY = (rect.top + rect.bottom) / 2;
+        // Align Predict button bottom with canvas bottom in landscape
+        document.getElementById('button').style.bottom = (window.innerHeight - rect.bottom) + 'px';
+    } else {
+        document.getElementById('button').style.bottom = '';
+        canvasContainer.style.right = '';
+        canvasContainer.style.transform = '';
+        canvasX = window.innerWidth / 2;
+        const canvasOffsetY = isSmallScreen ? 20 : -30;
+        canvasY = window.innerHeight / 2 + canvasOffsetY + HEADER_OFFSET;
+        canvasLeft = canvasX - canvasW / 2;
+        canvasRight = canvasX + canvasW / 2;
+        canvasTop = canvasY - canvasH / 2;
+        canvasBottom = canvasY + canvasH / 2;
+        canvasContainer.style.left = canvasLeft + 'px';
+        canvasContainer.style.top = canvasTop + 'px';
+    }
 
     document.getElementById('ui').style.visibility = 'visible';
 
     drawCanvas.style.width = canvasW + 'px';
     drawCanvas.style.height = canvasH + 'px';
     drawCanvas.style.imageRendering = 'pixelated';
+}
+
+// True when viewport is phone landscape (input page uses side-by-side layout)
+function isLandscapeInput() {
+    return window.innerWidth > window.innerHeight && window.innerHeight <= 500;
+}
+
+// Input canvas size: smaller on narrow viewports (e.g. mobile) so sides aren't cut off
+function getInputCanvasSize() {
+    const landscape = isLandscapeInput();
+    const isSmallScreen = window.innerHeight <= 700 || window.innerWidth <= 420;
+    const maxSize = isSmallScreen ? 280 : 400;
+    const padding = isSmallScreen ? 24 : 40;
+    let availableW, availableH;
+    if (landscape) {
+        // Canvas lives in right column (54%–94% of width); size to fit with margin
+        const rightColumnWidth = window.innerWidth * 0.4 - padding;
+        availableW = rightColumnWidth;
+        availableH = window.innerHeight - padding;
+    } else {
+        const topBottomReserve = isSmallScreen ? 260 : 220;
+        availableW = window.innerWidth - padding;
+        availableH = window.innerHeight - topBottomReserve;
+    }
+    const size = Math.min(maxSize, availableW, Math.max(200, availableH));
+    return { w: size, h: size };
 }
 
 function tensorHash(tensor) {
@@ -589,6 +644,46 @@ document.getElementById('drawCanvas').addEventListener('mouseleave', () => {
     isDrawing = false;
 });
 
+// Touch support for drawing on mobile (finger drag)
+function getDrawCanvasCoords(clientX, clientY) {
+    const rect = drawCanvas.getBoundingClientRect();
+    return {
+        x: (clientX - rect.left) * (32 / rect.width),
+        y: (clientY - rect.top) * (32 / rect.height)
+    };
+}
+
+function drawCanvasTouchStart(e) {
+    if (visualizing) return;
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+    isDrawing = true;
+    const { x, y } = getDrawCanvasCoords(e.touches[0].clientX, e.touches[0].clientY);
+    prevMouseX = x;
+    prevMouseY = y;
+}
+
+function drawCanvasTouchMove(e) {
+    if (!isDrawing || visualizing || e.touches.length !== 1) return;
+    e.preventDefault();
+    const { x, y } = getDrawCanvasCoords(e.touches[0].clientX, e.touches[0].clientY);
+    drawCtx.beginPath();
+    drawCtx.moveTo(prevMouseX, prevMouseY);
+    drawCtx.lineTo(x, y);
+    drawCtx.stroke();
+    prevMouseX = x;
+    prevMouseY = y;
+}
+
+function drawCanvasTouchEnd(e) {
+    if (e.touches.length === 0) isDrawing = false;
+}
+
+document.getElementById('drawCanvas').addEventListener('touchstart', drawCanvasTouchStart, { passive: false });
+document.getElementById('drawCanvas').addEventListener('touchmove', drawCanvasTouchMove, { passive: false });
+document.getElementById('drawCanvas').addEventListener('touchend', drawCanvasTouchEnd);
+document.getElementById('drawCanvas').addEventListener('touchcancel', drawCanvasTouchEnd);
+
 document.getElementById('button').addEventListener('click', () => {
     if (!visualizing) {
         startVisualization();
@@ -678,6 +773,60 @@ glCanvas.addEventListener('wheel', (e) => {
     }
 });
 
+// Touch controls for camera on mobile (one-finger orbit, two-finger pinch zoom)
+let lastPinchDistance = 0;
+const PINCH_ZOOM_SCALE = 0.5;
+
+function touchDistance(t1, t2) {
+    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+}
+
+glCanvas.addEventListener('touchstart', (e) => {
+    if (!visualizing || !MOUSE_CONTROLS_ENABLED) return;
+    if (e.touches.length === 1) {
+        camera.handleMouseDown(e.touches[0].clientX, e.touches[0].clientY);
+        lastPinchDistance = 0;
+    } else if (e.touches.length === 2) {
+        camera.handleMouseUp();
+        lastPinchDistance = touchDistance(e.touches[0], e.touches[1]);
+    }
+}, { passive: true });
+
+glCanvas.addEventListener('touchmove', (e) => {
+    if (!visualizing || !MOUSE_CONTROLS_ENABLED) return;
+    if (e.touches.length === 1) {
+        e.preventDefault();
+        camera.handleMouseMove(e.touches[0].clientX, e.touches[0].clientY);
+    } else if (e.touches.length === 2 && lastPinchDistance > 0) {
+        e.preventDefault();
+        const dist = touchDistance(e.touches[0], e.touches[1]);
+        const delta = (dist - lastPinchDistance) * PINCH_ZOOM_SCALE;
+        camera.handleWheel(-delta);
+        lastPinchDistance = dist;
+    }
+}, { passive: false });
+
+glCanvas.addEventListener('touchend', (e) => {
+    if (!visualizing || !MOUSE_CONTROLS_ENABLED) return;
+    if (e.touches.length === 0) {
+        camera.handleMouseUp();
+        lastPinchDistance = 0;
+    } else if (e.touches.length === 1) {
+        lastPinchDistance = 0;
+        // Allow remaining finger to orbit (treat as new drag)
+        camera.handleMouseDown(e.touches[0].clientX, e.touches[0].clientY);
+    } else if (e.touches.length === 2) {
+        lastPinchDistance = touchDistance(e.touches[0], e.touches[1]);
+    }
+});
+
+glCanvas.addEventListener('touchcancel', (e) => {
+    if (e.touches.length === 0) {
+        camera.handleMouseUp();
+        lastPinchDistance = 0;
+    }
+});
+
 // Keyboard controls
 document.addEventListener('keydown', (e) => {
     if (visualizing && KEYBOARD_CONTROLS_ENABLED) {
@@ -748,16 +897,54 @@ window.addEventListener('resize', () => {
         gl.canvas.height = window.innerHeight;
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
-        // Update canvas position
-        canvasX = window.innerWidth / 2;
-        canvasY = window.innerHeight / 2 - 30 + HEADER_OFFSET;
-        canvasLeft = canvasX - canvasW / 2;
-        canvasRight = canvasX + canvasW / 2;
-        canvasTop = canvasY - canvasH / 2;
-        canvasBottom = canvasY + canvasH / 2;
+        // Update input canvas size and position (responsive for mobile + landscape)
+        const landscape = isLandscapeInput();
+        const ui = document.getElementById('ui');
+        if (landscape) {
+            ui.classList.add('landscape-input');
+        } else {
+            ui.classList.remove('landscape-input');
+        }
 
+        const size = getInputCanvasSize();
+        canvasW = size.w;
+        canvasH = size.h;
         const canvasContainer = document.getElementById('canvas-container');
-        canvasContainer.style.left = canvasLeft + 'px';
-        canvasContainer.style.top = canvasTop + 'px';
+        canvasContainer.style.width = canvasW + 'px';
+        canvasContainer.style.height = canvasH + 'px';
+
+        if (landscape) {
+            canvasContainer.style.left = '';
+            canvasContainer.style.right = '';
+            canvasContainer.style.top = '50%';
+            canvasContainer.style.transform = 'translateY(-50%)';
+            const rect = canvasContainer.getBoundingClientRect();
+            canvasLeft = rect.left;
+            canvasRight = rect.right;
+            canvasTop = rect.top;
+            canvasBottom = rect.bottom;
+            canvasX = (rect.left + rect.right) / 2;
+            canvasY = (rect.top + rect.bottom) / 2;
+            document.getElementById('button').style.bottom = (window.innerHeight - rect.bottom) + 'px';
+        } else {
+            document.getElementById('button').style.bottom = '';
+            canvasContainer.style.right = '';
+            canvasContainer.style.transform = '';
+            const isSmallScreen = window.innerHeight <= 700 || window.innerWidth <= 420;
+            const canvasOffsetY = isSmallScreen ? 20 : -30;
+            canvasX = window.innerWidth / 2;
+            canvasY = window.innerHeight / 2 + canvasOffsetY + HEADER_OFFSET;
+            canvasLeft = canvasX - canvasW / 2;
+            canvasRight = canvasX + canvasW / 2;
+            canvasTop = canvasY - canvasH / 2;
+            canvasBottom = canvasY + canvasH / 2;
+            canvasContainer.style.left = canvasLeft + 'px';
+            canvasContainer.style.top = canvasTop + 'px';
+        }
+
+        if (drawCanvas) {
+            drawCanvas.style.width = canvasW + 'px';
+            drawCanvas.style.height = canvasH + 'px';
+        }
     }
 });

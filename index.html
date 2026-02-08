@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>CNN Visualizer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,6 +19,7 @@
 
         canvas {
             display: block;
+            touch-action: none;
         }
 
         #ui {
@@ -37,6 +38,7 @@
 
         #canvas-container {
             position: absolute;
+            touch-action: none;
             border: 2px solid transparent;
             background:
                 linear-gradient(#000, #000) padding-box,
@@ -67,6 +69,7 @@
             display: block;
             width: 100%;
             height: 100%;
+            touch-action: none;
         }
 
         #instructions {
@@ -89,6 +92,24 @@
             font-size: 10px;
             margin-top: 16px;
             opacity: 0.95;
+        }
+
+        /* Small viewport (e.g. iPhone SE 375x667): instructions above canvas, use most of screen width */
+        @media (max-height: 700px), (max-width: 420px) {
+            #instructions {
+                top: 9%;
+                left: 50%;
+                transform: translate(-50%, 0);
+                font-size: 10px;
+                width: 92%;
+                max-width: calc(100vw - 24px);
+                box-sizing: border-box;
+                padding: 0 8px;
+            }
+            #instructions .sub {
+                font-size: 8px;
+                margin-top: 6px;
+            }
         }
 
         #button {
@@ -153,7 +174,7 @@
             display: none;
             position: absolute;
             left: 50%;
-            top: 40px;
+            top: max(40px, calc(env(safe-area-inset-top, 0px) + 24px));
             transform: translateX(-50%);
             color: #ffcc00;
             text-align: center;
@@ -174,6 +195,72 @@
         }
         #ui.has-header #button {
             transform: translate(-50%, calc(-50% + 310px));
+        }
+        /* Small viewport: header and instructions above canvas, text uses full width with margin */
+        @media (max-height: 700px), (max-width: 420px) {
+            #inputHeader {
+                top: max(24px, calc(env(safe-area-inset-top, 0px) + 16px));
+                left: 50%;
+                transform: translateX(-50%);
+                font-size: 14px;
+                line-height: 1.8;
+                width: 92%;
+                max-width: calc(100vw - 24px);
+                box-sizing: border-box;
+                padding: 0 8px;
+                white-space: normal;
+                text-align: center;
+            }
+            #ui.has-header #instructions {
+                top: 9%;
+                transform: translate(-50%, 0);
+            }
+        }
+
+        /* Landscape on phone: centered 2-column layout with margin from edges */
+        @media (orientation: landscape) and (max-height: 500px) {
+            #ui.landscape-input #inputHeader {
+                left: 6%;
+                right: auto;
+                transform: none;
+                width: 38%;
+                max-width: none;
+                text-align: left;
+                top: max(12px, env(safe-area-inset-top) + 8px);
+            }
+            #ui.landscape-input #instructions {
+                left: 6%;
+                transform: none;
+                top: 22%;
+                width: 38%;
+                max-width: none;
+                text-align: left;
+                padding: 0;
+            }
+            #ui.landscape-input #instructions .sub {
+                margin-top: 6px;
+            }
+            #ui.landscape-input #button {
+                left: 6%;
+                right: auto;
+                transform: none;
+                top: auto;
+                bottom: max(28px, env(safe-area-inset-bottom) + 64px);
+                width: min(220px, 90%);
+                height: 52px;
+                font-size: 10px;
+            }
+            #ui.landscape-input #canvas-container {
+                left: 54%;
+                right: 6%;
+                top: 50%;
+                transform: translateY(-50%);
+                margin-left: auto;
+                margin-right: auto;
+            }
+            #ui.landscape-input.has-header #instructions {
+                top: 28%;
+            }
         }
 
         .hidden {
