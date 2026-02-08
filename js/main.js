@@ -72,6 +72,46 @@ let ORBIT_CENTER_PRESETS = [
     { x: 0, y: -100, z: 900 }, // after MLP2
 ];
 
+// Mobile camera presets (used when viewport is small: width <= 420 or height <= 700).
+// Same indices as CAMERA_PRESETS. Set to null to use desktop CAMERA_PRESETS for that index.
+let MOBILE_CAMERA_PRESETS = [
+    { distance: 2500, rotationX: -0.6, rotationY: -0.2, translation: { x: 450, y: 150, z: -1400 } },
+    { distance: 2500, rotationX: -0.6, rotationY: -0.2, translation: { x: 450, y: 150, z: -900 } },
+    { distance: 2500, rotationX: -0.4, rotationY: -0.2, translation: { x: 400, y: 150, z: -400 } },
+    { distance: 2500, rotationX: -0.2, rotationY: -0.2, translation: { x: 100, y: 150, z: 0 } },
+    { distance: 2500, rotationX: 0, rotationY: -0.3, translation: { x: 0, y: 150, z: 1100 } },
+    { distance: 2500, rotationX: 0, rotationY: -0.3, translation: { x: 0, y: 150, z: 1100 } },
+    { distance: 2500, rotationX: 0, rotationY: -0.3, translation: { x: 0, y: 150, z: 1100 } },
+    { distance: 2500, rotationX: 0, rotationY: -0.3, translation: { x: 0, y: 150, z: 1100 } },
+];
+
+// Mobile orbit center presets. Same indices as ORBIT_CENTER_PRESETS. Set to null to use desktop presets.
+let MOBILE_ORBIT_CENTER_PRESETS = [
+    { x: -400, y: -100, z: 100 },
+    { x: -400, y: -100, z: 300 },
+    { x: -400, y: -100, z: 500 },
+    { x: 0, y: -100, z: 700 },
+    { x: 0, y: -100, z: 900 },
+    { x: 0, y: -100, z: 900 },
+    { x: 0, y: -100, z: 900 },
+    { x: 0, y: -100, z: 900 },
+];
+
+// True when viewport is mobile-sized AND portrait; only then use MOBILE_* presets. Landscape uses CAMERA_PRESETS.
+function isMobilePortraitView() {
+    const small = window.innerWidth <= 420 || window.innerHeight <= 700;
+    const portrait = window.innerWidth <= window.innerHeight;
+    return small && portrait;
+}
+
+function getCameraPresets() {
+    return isMobilePortraitView() ? MOBILE_CAMERA_PRESETS : CAMERA_PRESETS;
+}
+
+function getOrbitCenterPresets() {
+    return isMobilePortraitView() ? MOBILE_ORBIT_CENTER_PRESETS : ORBIT_CENTER_PRESETS;
+}
+
 // Camera transition: speed of smooth move between presets (higher = faster). ~2 = ~1s to settle.
 const CAMERA_TRANSITION_SPEED = 2.0;
 
@@ -227,12 +267,12 @@ function setupVisualizer() {
 
     window.onLayerComplete = (completedAnimation) => {
         const idx = layerOrder.indexOf(completedAnimation) + 1; // preset 1..7 = after each layer
-        if (idx >= 1 && CAMERA_PRESETS[idx]) {
-            camera.setState(CAMERA_PRESETS[idx]);
+        if (idx >= 1 && getCameraPresets()[idx]) {
+            camera.setState(getCameraPresets()[idx]);
         }
         // Set orbit center from manual preset for this layer (if defined)
-        if (ORBIT_CENTER_PRESETS[idx] != null) {
-            const c = ORBIT_CENTER_PRESETS[idx];
+        if (getOrbitCenterPresets()[idx] != null) {
+            const c = getOrbitCenterPresets()[idx];
             camera.center.x = c.x;
             camera.center.y = c.y;
             camera.center.z = c.z;
@@ -537,8 +577,8 @@ function drawInputPage() {
 function reset() {
     if (!tv1) return; // Not initialized yet
 
-    if (CAMERA_PRESETS[0]) {
-        camera.setState(CAMERA_PRESETS[0]);
+    if (getCameraPresets()[0]) {
+        camera.setState(getCameraPresets()[0]);
     }
 
     document.getElementById('returnToInputButton').classList.add('hidden');
@@ -590,13 +630,13 @@ function startVisualization() {
     lastInputTensorHash = null;
 
     // Apply initial camera preset (index 0) if set
-    if (CAMERA_PRESETS[0]) {
-        camera.setState(CAMERA_PRESETS[0]);
+    if (getCameraPresets()[0]) {
+        camera.setState(getCameraPresets()[0]);
     }
 
-    // Set initial orbit center from ORBIT_CENTER_PRESETS[0] (if defined)
-    if (ORBIT_CENTER_PRESETS[0] != null) {
-        const c = ORBIT_CENTER_PRESETS[0];
+    // Set initial orbit center from presets (if defined)
+    if (getOrbitCenterPresets()[0] != null) {
+        const c = getOrbitCenterPresets()[0];
         camera.center.x = c.x;
         camera.center.y = c.y;
         camera.center.z = c.z;
@@ -840,12 +880,14 @@ document.addEventListener('keydown', (e) => {
         if (e.key === 'c' || e.key === 'C') {
             reset();
         }
-        // P: print current camera state for pasting into CAMERA_PRESETS
+        // P: print current camera state for pasting into CAMERA_PRESETS or MOBILE_CAMERA_PRESETS
         if (e.key === 'p' || e.key === 'P') {
             const code = camera.getStateAsCodeString();
-            console.log('Camera state (paste into CAMERA_PRESETS):');
+            const dest = isMobilePortraitView() ? 'MOBILE_CAMERA_PRESETS' : 'CAMERA_PRESETS';
+            console.log(`Camera state (paste into ${dest}):`);
             console.log(code);
-            console.log('Orbit center (paste into ORBIT_CENTER_PRESETS):');
+            const orbitDest = isMobilePortraitView() ? 'MOBILE_ORBIT_CENTER_PRESETS' : 'ORBIT_CENTER_PRESETS';
+            console.log(`Orbit center (paste into ${orbitDest}):`);
             console.log(`{ x: ${camera.center.x}, y: ${camera.center.y}, z: ${camera.center.z} },`);
         }
     }
